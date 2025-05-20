@@ -6,7 +6,7 @@ from mesa.datacollection import DataCollector
 from agent import BoltzmannWalkerAnt
 
 class AntModel(Model):
-    def __init__(self, width=100, height=100, N=50, mean_free_path=5.0, g=0.3, seed=None):
+    def __init__(self, width=100, height=100, N=50, mean_free_path=0.01, g=0.3, seed=None):
         super().__init__(seed=seed)
         self.space = ContinuousSpace(
             [[0, width], [0, height]], torus=True, random=self.random, n_agents=N
