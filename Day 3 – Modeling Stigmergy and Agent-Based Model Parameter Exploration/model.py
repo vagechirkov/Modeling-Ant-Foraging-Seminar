@@ -93,3 +93,11 @@ class StigmergyModel(Model):
         self.agents.shuffle_do("step")  # perform agent steps in a randomized order
         self._update_pheromone()
         self.datacollector.collect(self)
+
+
+if __name__ == "__main__":
+    m1 = StigmergyModel(seed=42)
+    m1.step()
+    collected_data = m1.datacollector.get_model_vars_dataframe()
+
+    df_shape = collected_data.shape
