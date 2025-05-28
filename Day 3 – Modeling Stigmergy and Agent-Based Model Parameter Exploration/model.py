@@ -15,11 +15,10 @@ class StigmergyModel(Model):
         width: int = 101,
         height: int = 101,
         population: int = 125,
+        speed: float = 1.0,
+        kappa: float = 5.0,
         diffusion_rate: float = 25.0,
         evaporation_rate: float = 5.0,
-        mean_free_path: float = 5.0,
-        g: float = 0.3,
-        speed: float = 1.0,
         seed: int | None = None,
     ) -> None:
         super().__init__(seed=seed)
@@ -32,7 +31,6 @@ class StigmergyModel(Model):
             random=self.random,
             n_agents=population,
         )
-        self.space.properties = {}
 
         # Grid fields
         self.pheromone = np.zeros((width, height), dtype=float)
@@ -45,7 +43,7 @@ class StigmergyModel(Model):
 
         # Build world & agents
         self._setup_patches()
-        self._create_ants(population, mean_free_path, g, speed)
+        self._create_ants(population, kappa, speed)
 
         self.datacollector = DataCollector(
             model_reporters={
@@ -76,16 +74,15 @@ class StigmergyModel(Model):
         _fill_circle((0.2 * self.width, 0.2 * self.height))  # lower‑left
         _fill_circle((0.1 * self.width, 0.9 * self.height))  # upper‑left
 
-    def _create_ants(self, n: int, mfp: float, g: float, speed: float):
+    def _create_ants(self, n: int, kappa: float, speed: float):
         nest_pos = np.array([self.width / 2, self.height / 2])
         Ant.create_agents(
             self,
             n,
             self.space,
             position=np.tile(nest_pos, (n, 1)),
-            mean_free_path=mfp,
-            g=g,
             speed=speed,
+            kappa=kappa,
         )
 
     def _update_pheromone(self):

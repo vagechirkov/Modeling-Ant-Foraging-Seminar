@@ -5,7 +5,7 @@ from mesa.experimental.continuous_space import ContinuousSpaceAgent, ContinuousS
 
 
 class Ant(ContinuousSpaceAgent):
-    """Continuous‑space ant with Boltzmann‑Walker search and pheromone perception."""
+    """Continuous‑space ant with random search and pheromone perception."""
 
     # Angular constants (degrees) to mimic NetLogo *uphill* checks
     _RIGHT: int = 45
@@ -17,17 +17,15 @@ class Ant(ContinuousSpaceAgent):
         space: ContinuousSpace,
         position: Tuple[float, float],
         speed: float = 1.0,
-        mean_free_path: float = 5.0,
-        g: float = 0.3,
+        kappa: float = 5.0,
     ) -> None:
         super().__init__(space, model)
         self.position = np.asarray(position, dtype=float)
         self.heading: float = self.random.uniform(-np.pi, np.pi)  # radians
         self.speed: float = float(speed)
 
-        # Boltzmann‑Walker parameters
-        self.mean_free_path = float(mean_free_path)
-        self.g = float(g)
+        # Random‑Walker parameters
+        self.kappa = float(kappa)
 
         # Foraging state
         self.carrying: bool = False
@@ -38,6 +36,14 @@ class Ant(ContinuousSpaceAgent):
         x, y = self.position
         return int(x) % self.model.width, int(y) % self.model.height
 
+    @property
+    def x(self) -> float:
+        return float(self.position[0])
+
+    @property
+    def y(self) -> float:
+        return float(self.position[1])
+
     def _move(self, distance: float | None = None) -> None:
         """Translate by *distance* along current heading (default = self.speed)."""
         if distance is None:
@@ -47,28 +53,9 @@ class Ant(ContinuousSpaceAgent):
         self.position += (dx, dy)
         self.position = self.space.torus_correct(tuple(self.position))
 
-    def _relliptic(self) -> float:
-        """Draw a heading change Δθ from the elliptical distribution, Alg.4 Khuong et al.(2013)."""
-        g = self.g
-        if not (-1 < g < 1):
-            raise ValueError("g must lie in (‑1, 1)")
-        gratio = (1 - g) / (1 + g)
-        tmp = np.tan(self.random.random() * np.pi / 2) * gratio
-        sgn = 1 if self.random.uniform(-1, 1) >= 0 else -1
-        return 2.0 * sgn * np.atan(tmp)
-
-    def _boltzmann_search(self) -> None:
-        """One Boltzmann‑Walker step: draw free path ℓ and turn Δθ, Alg.2 Khuong et al.(2013)"""
-        l = self.random.expovariate(1 / self.mean_free_path)  # exponential
-        self._move(l)
-        self.heading += self._relliptic()
-
-    def _sample_deg(self, field: np.ndarray, deg: int) -> float:
-        """Sample field one unit ahead turned by deg degrees."""
-        theta = self.heading + np.radians(deg)
-        x = self.position[0] + np.cos(theta)
-        y = self.position[1] + np.sin(theta)
-        return float(field[int(x) % self.model.width, int(y) % self.model.height])
+    def _random_search(self) -> None:
+        self._move()
+        self.heading += self.random.vonmisesvariate(0, kappa=5.0)
 
     def _pickup_food(self) -> bool:
         ix, iy = self._ixiy
@@ -96,13 +83,28 @@ class Ant(ContinuousSpaceAgent):
         # Orient towards nest
         self.heading = np.atan2(vec_y, vec_x)
 
-        # Deposit pheromone before moving (so trail covers the current patch too)
+        # Deposit pheromone before moving (so the trail covers the current patch too)
         self._deposit_pheromone()
         self._move()
 
     def _deposit_pheromone(self) -> None:
         ix, iy = self._ixiy
         self.model.pheromone[ix, iy] += 60.0
+
+    def _sample_deg(self, field: np.ndarray, deg: int) -> float:
+        """Sample field one unit ahead turned by deg degrees."""
+        theta = self.heading + np.radians(deg)
+        x = self.position[0] + np.cos(theta)
+        y = self.position[1] + np.sin(theta)
+        return float(field[int(x) % self.model.width, int(y) % self.model.height])
+
+    def _uphill(self, field: np.ndarray) -> None:
+        """Turn ±45° toward the highest neighbouring cell in *field*."""
+        ahead = self._sample_deg(field, 0)
+        right = self._sample_deg(field, self._RIGHT)
+        left = self._sample_deg(field, self._LEFT)
+        if (right > ahead) or (left > ahead):
+            self.heading += np.radians(self._RIGHT if right > left else self._LEFT)
 
     def _check_pheromones(self) -> bool:
         ix, iy = self._ixiy
@@ -112,14 +114,6 @@ class Ant(ContinuousSpaceAgent):
             self._move()
             return True
         return False
-
-    def _uphill(self, field: np.ndarray) -> None:
-        """Turn ±45° toward the highest neighbouring cell in *field*."""
-        ahead = self._sample_deg(field, 0)
-        right = self._sample_deg(field, self._RIGHT)
-        left = self._sample_deg(field, self._LEFT)
-        if (right > ahead) or (left > ahead):
-            self.heading += np.radians(self._RIGHT if right > left else self._LEFT)
 
     def step(self) -> None:
         if self.carrying:
@@ -135,4 +129,4 @@ class Ant(ContinuousSpaceAgent):
             return
 
         # Perform an uninformed search as a fallback if neither food nor pheromone cues are found
-        self._boltzmann_search()
+        self._random_search()
